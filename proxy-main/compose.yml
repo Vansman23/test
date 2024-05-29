@@ -1,0 +1,91 @@
+## this is the specification version of docker compose. You can find more about docker-compose versioning here: https://docs.docker.com/compose/compose-file/compose-versioning/#version-3
+version: '3.9'
+## under this tag, we will define our main services object
+services: 
+  reverse-proxy:
+        ## Traefik version we will be using.
+        image: traefik:v2.10 
+        container_name: traefik
+        ## This will tell docker, that this service has to be always online, except I ask to stop it.
+        restart: unless-stopped 
+        environment:
+        ## I will add the Compose Project name, to clasify my services into a Project "homeserver"
+        - COMPOSE_PROJECT_NAME=stellarcat
+        security_opt:
+        - no-new-privileges:true ## This is to prevent your container processes from gaining additional privileges
+        command:
+        # Enable Docker in Traefik, so that it reads labels from Docker services
+        ## Traefik will control trafik to 80 and 443
+        - --entrypoints.web.address=:80 
+        #- --entrypoints.websecure.address=:443
+        ## We need to add TLS to make it secure for "443"
+        #- --entrypoints.websecure.http.tls=true
+        - --providers.docker
+        - --providers.docker.network=proxy-main
+        - --providers.docker.exposedbydefault=false
+        ## The cert configuration we created previously
+        #- --providers.file.filename=/etc/certs/tls.yml
+        - --api
+        ports:
+        - 80:80 ## listening to 80 
+        # - 443:443 ## listening to 443
+        # - target: "8090"
+        #  host_ip: 127.0.0.1
+        #  published: "8091"
+        #  protocol: tcp
+        #  mode: host
+        labels:
+            ## We won't be serving http trafik from this service. We could though, enable traefik dashboard
+            traefik.enable: false 
+            ## this backend is traefik
+            traefik.backend: traefik 
+            ## will be handling trafik from this proxy
+            traefik.docker.network: proxy-main 
+            ###### SSL Configuration Headers
+            #traefik.frontend.headers.SSLRedirect: true ## 
+            #traefik.frontend.headers.STSSeconds: 315360000
+            traefik.frontend.headers.browserXSSFilter: true
+            traefik.frontend.headers.contentTypeNosniff: true
+            #traefik.frontend.headers.forceSTSHeader: true
+            #traefik.frontend.headers.SSLHost: "eristich.dev"
+            #traefik.frontend.headers.STSIncludeSubdomains: true
+            #traefik.frontend.headers.STSPreload: true
+            traefik.frontend.whiteList.useXForwardedFor: true
+            # traefik.frontend.headers.frameDeny: true
+            # traefik.frontend.headers.customFrameOptionsValue: SAMEORIGIN  
+
+            ##### Will review any request coming to any hostname directing to our home server, like http://homeserver.local
+            traefik.http.routers.http_catchall.rule: hostregexp(`{host:.+}`)
+            
+            # Code Server Configuration
+            #traefik.http.routers.code-server.entrypoints: web
+            #traefik.http.routers.code-server.rule: Host(`code.eristich.dev`)
+            #traefik.http.middlewares.code-server-https-redirect.redirectscheme.scheme: https
+            #traefik.http.routers.code-server.middlewares: code-server-https-redirect
+            #traefik.http.routers.code-server-secure.entrypoints: websecure
+            #traefik.http.routers.code-server-secure.rule: Host(`code.eristich.dev`)
+            #traefik.http.routers.code-server-secure.tls: true
+            #traefik.http.routers.code-server-secure.service: host.docker.internal
+            #traefik.http.services.code-server.loadbalancer.server.port: 8091
+
+        volumes:
+        ### Traefik needs to access docker socket to read labels from other services
+        - /var/run/docker.sock:/var/run/docker.sock:ro 
+        ### We need to read our certs and the yml config
+        # - ./certs:/etc/certs:ro
+
+        extra_hosts:
+        ## Every service that runs on your host and binds to the network interface, it can be accessed from inside a container.
+        - "host.docker.internal:host-gateway" 
+
+        ## It will be using traefik_proxy but also the default bridge. 
+        networks:
+        - proxy-main
+        - default
+
+#### This are the main networks that our services here will use. A bridge network and the traefik_proxy, which is the one that traefik will use to route the trafik. 
+networks: 
+    proxy-main:
+        external: true
+    default:
+        driver: bridge

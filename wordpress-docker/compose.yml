@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  stellarcat-wordpress-db:
+    container_name: stellarcat-wordpress-db
+    hostname: stellarcat-wordpress-db
+    image: mysql:5.7.40
+    volumes:
+      - db_data:/var/lib/mysql
+      # - ./wordpress/db:/var/lib/mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: wordpress
+      MYSQL_DATABASE: wordpress
+      MYSQL_USER: wordpress
+      MYSQL_PASSWORD: wordpress
+    networks:
+      - wordpress-net
+
+  stellarcat-wordpress:
+    container_name: stellarcat-wordpress
+    depends_on:
+      - stellarcat-wordpress-db
+    image: wordpress:6.4.3-php8.2-apache
+    restart: always
+    # volumes:
+    #   - ./wordpress/uploads.ini:/usr/local/etc/php/conf.d/uploads.ini
+    #   - ./wordpress/html:/var/www/html
+    environment:
+      WORDPRESS_DB_HOST: stellarcat-wordpress-db
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      WORDPRESS_DB_NAME: wordpress
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.stellarcat-wordpress.entrypoints=web"
+      - "traefik.http.routers.stellarcat-wordpress.rule=Host(`172.1.0.19`)"
+      - "traefik.http.services.stellarcat-wordpress.loadbalancer.server.port=80"
+      - "traefik.docker.network=proxy-main"
+    networks:
+      - proxy-main
+      - wordpress-net
+
+networks:
+  proxy-main:
+    external: true
+  wordpress-net:
+
+volumes:
+  db_data:
